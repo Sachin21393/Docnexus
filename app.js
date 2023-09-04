@@ -8,9 +8,9 @@ const jwt= require("jsonwebtoken");
 const mongoose= require("mongoose");
 const user=require("./database/models/user")
 const {verifyToken}=require("./auth")
-const productDetail=require("./database/models/ProductDetail");
+const blogDetails=require("./database/models/blogdetails");
 app.use(express.json());
-mongoose.connect("mongodb://127.0.0.1:27017/datavio",{
+mongoose.connect("mongodb://127.0.0.1:27017/DocNexus",{
     useNewUrlParser: true,
     useUnifiedTopology: true,
 
@@ -21,59 +21,8 @@ mongoose.connect("mongodb://127.0.0.1:27017/datavio",{
 
 
 
-const scrapData=async (url,email)=>{
-    const response = await axios.get(url);
-    const $ = cheerio.load(response.data);
-    const title = $('.B_NuCI').text(); // Replace with actual selector
-    const price = $('._16Jk6d').text(); 
-    const stars=parseFloat($('._2d4LTz').text());
-    const description = $('.RmoJUa').text();
-    const reviewAndRating = $('._2afbiS').text();
-const ratingNumber=parseInt(reviewAndRating.split(' ')[0]);
-const reviewNumber=parseInt(reviewAndRating.split(' ')[2].split('&')[1]);
-let scrappedData={
-    email: email,
-    url: url,
-    productDetail:[{
-        title:title,
-        price:price,
-        description:description,
-        reviewNumber:reviewNumber,
-        ratingNumber:ratingNumber,
-        Ratings:stars
-    }]
-}
-   return scrappedData;
-}
-app.post("/scrap",verifyToken,async(req,res)=>{
- const url=req.body.url;
-jwt.verify(req.token,secretkey,async(er,auth)=>{
-  if(er){
 
-    res.send("invalid")
-  }else{
-    const checkUrlExist=await productDetail.findOne({ $and: [ { 'email': auth.userDetails.emailid }, { 'url': url} ] });
-    if(checkUrlExist){
-        res.json({
-            data:checkUrlExist
-        })
-    }else{
-    const getData=await scrapData(url,auth.userDetails.emailid);
-    const scrappedData=new productDetail({...getData});
-    const saveData=await scrappedData.save();
-    if(saveData){
-        res.json({
-            message:"New data saved",
-            data:getData.productDetail
-        })
-    }
-}
 
-   
-    
-  }
-})
-})
 app.post("/login",async(req,res)=>{
  const userDetails=req.body;
  const validateDetails=await user.findOne({ $and: [ { 'emailid': userDetails.emailid }, { 'password': userDetails.password} ] });
@@ -119,18 +68,114 @@ if(saveUser){
     })
 }
 })
-app.get('/',async (req,res)=>{
-  const response = await axios.get(url);
-    const $ = cheerio.load(response.data);
-    const title = $('.B_NuCI').text(); // Replace with actual selector
-    const price = $('._16Jk6d').text(); 
-    const stars=$('._2d4LTz').text();
-    const rating=$('._3LWZlK').text();
-    const description = $('.RmoJUa').text();
-    const review = $('._2afbiS').text();
-    console.log("price",price)
-    console.log("===",title, price,review,stars,description);
-})
+app.post("/createPost",verifyToken,async(req,res)=>{
+    const url=req.body.url;
+   jwt.verify(req.token,secretkey,async(er,auth)=>{
+     if(er){
+   
+       res.send("invalid login")
+     }else{
+       const userData=await user.findOne({emailid:req.data.emailid})
+       const blogData=req.body.data;
+       const saveData=new blogDetails({...blogData,author:userData._id});
+       try{
+       const response= await saveData.save();
+   
+       if(response){
+           res.json({
+               "data": response,
+               "status": "success"
+           })
+       }else{
+           res.json({
+               "status": "failed to save"
+           })
+       }
+   }catch(e){
+     console.log(e)
+   }
+      
+   }
+   
+      
+       
+     
+   })
+   })
+
+   app.put("/updatePost/:postId",verifyToken,async(req,res)=>{
+    const url=req.body.url;
+   jwt.verify(req.token,secretkey,async(er,auth)=>{
+     if(er){
+   
+       res.send("invalid login")
+     }else{
+       const userData=await user.findOne({emailid:req.data.emailid})
+       const blogData=req.body.data;
+       const saveData=new blogDetails({...blogData,author:userData._id});
+       
+        try {
+            const { postId } = req.params;
+            const { title, content } = req.body;
+    
+  
+            const blogPost = await blogDetails.findById(postId);
+            if (!blogPost) {
+                return res.send('Blog post not found.');
+            }
+    
+            blogPost.title = title;
+            blogPost.content = content;
+            await blogPost.save();
+    
+            res.json({
+               "message": "Blog post updated successfully",
+                "status": "success"
+            })
+        } catch (error) {
+            console.error(error);
+       res.send("not able to update blog post")
+        }
+    
+    }
+    })
+   })
+
+   // Delete a blog post by ID
+app.delete('/deletePost/:postId', verifyToken, async (req, res) => {
+    try {
+        const { postId } = req.params;
+
+        const blogPost = await blogDetails.findByIdAndDelete(postId)
+        if (!blogPost) {
+            return res.send('Blog post not found.');
+        }
+       
+    
+        res.json({
+            "message": "Blog post deleted successfully",
+             "status": "success"
+         })
+    } catch (error) {
+        console.error(error);
+      
+    }
+});
+
+app.get('/getposts', async (req, res) => {
+    try {
+        
+        const blogPosts = await blogDetails.find().populate('author');
+
+    
+        res.json(blogPosts);
+    } catch (error) {
+        console.error(error);
+    
+    }
+});
+
+
 app.listen(80,()=>{
   console.log('listening on port 80');
 })
